@@ -52,6 +52,7 @@ class TrainLoop(object):
 				gen_loss+=new_gen_loss
 				disc_loss+=new_disc_loss
 				self.total_iters += 1
+				print(new_gen_loss, new_disc_loss)
 
 			self.history['gen_loss'].append(gen_loss/(t+1))
 			self.history['disc_loss'].append(disc_loss/(t+1))
@@ -88,9 +89,7 @@ class TrainLoop(object):
 		y_real_ = Variable(y_real_)
 		y_fake_ = Variable(y_fake_)
 
-		out = self.model.forward(z_)
-
-		out_d = out.detach()
+		out_d = self.model.forward(z_).detach()
 
 		loss_d = 0
 
@@ -98,8 +97,8 @@ class TrainLoop(object):
 			d_real = disc.forward(x).squeeze()
 			d_fake = disc.forward(out_d).squeeze()
 			loss_disc = F.binary_cross_entropy(d_real, y_real_) + F.binary_cross_entropy(d_fake, y_fake_)
-			loss_disc.backward()
 			disc.optimizer.zero_grad()
+			loss_disc.backward()
 			disc.optimizer.step()
 
 			loss_d += loss_disc.data[0]
@@ -107,8 +106,6 @@ class TrainLoop(object):
 		loss_d /= len(self.disc_list)
 
 		## Train G
-
-		self.model.train()
 
 		z_ = torch.randn(x.size(0), 100).view(-1, 100, 1, 1)
 
@@ -129,9 +126,11 @@ class TrainLoop(object):
 				d_out = disc.forward(out).squeeze()
 				loss_G += F.binary_cross_entropy(d_out, y_real_)
 
-		loss_G.backward()
 		self.optimizer.zero_grad()
+		loss_G.backward()
 		self.optimizer.step()
+
+		self.print_grad_norms()
 
 		return loss_G.data[0] / len(self.disc_list), loss_d
 
