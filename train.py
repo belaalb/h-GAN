@@ -13,7 +13,7 @@ import model
 # Training settings
 parser = argparse.ArgumentParser(description='Online transfer learning for emotion recognition tasks')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N', help='input batch size for training (default: 64)')
-parser.add_argument('--epochs', type=int, default=500, metavar='N', help='number of epochs to train (default: 500)')
+parser.add_argument('--epochs', type=int, default=50, metavar='N', help='number of epochs to train (default: 50)')
 parser.add_argument('--lr', type=float, default=0.0002, metavar='LR', help='learning rate (default: 0.0002)')
 parser.add_argument('--beta1', type=float, default=0.5, metavar='lambda', help='Adam beta param (default: 0.5)')
 parser.add_argument('--beta2', type=float, default=0.999, metavar='lambda', help='Adam beta param (default: 0.999)')
@@ -25,7 +25,7 @@ parser.add_argument('--workers', type=int, help='number of data loading workers'
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 parser.add_argument('--save-every', type=int, default=5, metavar='N', help='how many epochs to wait before logging training status. Default is 5')
 parser.add_argument('--hyper-mode', action='store_true', default=False, help='enables training with hypervolume maximization')
-parser.add_argument('--nadir', type=float, default=1.1, metavar='nadir', help='Nadir point for the case of hypervolume maximization (default: 1.1)')
+parser.add_argument('--nadir-factor', type=float, default=100.0, metavar='nadir', help='Factor of the max disc loss to initialize nadir point (default: 2.0)')
 parser.add_argument('--no-cuda', action='store_true', default=False, help='Disables GPU use')
 args = parser.parse_args()
 args.cuda = True if not args.no_cuda and torch.cuda.is_available() else False
@@ -56,7 +56,7 @@ for i in range(args.ndiscriminators):
 optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
 if args.hyper_mode:
-	trainer = TrainLoop(generator, disc_list, optimizer, train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, nadir=args.nadir, cuda=args.cuda)
+	trainer = TrainLoop(generator, disc_list, optimizer, train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, nadir_factor=args.nadir_factor, cuda=args.cuda)
 else:
 	trainer = TrainLoop(generator, disc_list, optimizer, train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, cuda=args.cuda)
 
