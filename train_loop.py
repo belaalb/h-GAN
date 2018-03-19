@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 class TrainLoop(object):
 
-	def __init__(self, generator, disc_list, optimizer, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_slack=None, cuda=True):
+	def __init__(self, generator, disc_list, optimizer, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_factor=None, cuda=True):
 		if checkpoint_path is None:
 			# Save to current directory
 			self.checkpoint_path = os.getcwd()
@@ -33,17 +33,17 @@ class TrainLoop(object):
 		if checkpoint_epoch is not None:
 			self.load_checkpoint(checkpoint_epoch)
 
-			if nadir_slack:
+			if nadir_factor:
 				self.hyper_mode = True
-				self.nadir_slack = nadir_slack
+				self.nadir_factor = nadir_factor
 			else:
 				self.hyper_mode = False
 				self.nadir = 0.0
 
 		else:
-			if nadir_slack:
-				#self.define_nadir_point(nadir_slack)
-				self.nadir_slack = nadir_slack
+			if nadir_factor:
+				#self.define_nadir_point(nadir_factor)
+				self.nadir_factor = nadir_factor
 				self.hyper_mode = True
 			else:
 				self.hyper_mode = False
@@ -64,6 +64,8 @@ class TrainLoop(object):
 				self.total_iters += 1
 				self.history['gen_loss_minibatch'].append(new_gen_loss)
 				self.history['disc_loss_minibatch'].append(new_disc_loss)
+
+				print(new_gen_loss, new_disc_loss)
 
 			self.history['gen_loss'].append(gen_loss/(t+1))
 			self.history['disc_loss'].append(disc_loss/(t+1))
@@ -131,21 +133,25 @@ class TrainLoop(object):
 			losses_list_var = []
 
 			for disc in self.disc_list:
-				losses_list_var.append( F.binary_cross_entropy( disc.forward(out).squeeze(), y_real_) )
-				losses_list_float.append( losses_list_var[-1].data[0] )
+				d_out = disc.forward(out).squeeze()
+				losses_list_var.append(F.binary_cross_entropy(d_out, y_real_))
+				losses_list_float.append(losses_list_var[-1].data[0])
 
 			self.update_nadir_point(losses_list_float)
 
-			for loss in self.losses_list_var:
-				loss_G -= torch.log( self.nadir - loss )
+			for loss in losses_list_var:
+				loss_G -= torch.log( self.nadir - loss)
 
 		else:
 			for disc in self.disc_list:
-				loss_G += F.binary_cross_entropy(disc.forward(out).squeeze(), y_real_)
+				d_out = disc.forward(out).squeeze()
+				loss_G += F.binary_cross_entropy(d_out, y_real_)
 
 		self.optimizer.zero_grad()
 		loss_G.backward()
 		self.optimizer.step()
+
+		self.print_grad_norms()
 
 		return loss_G.data[0] / len(self.disc_list), loss_d
 
@@ -222,7 +228,8 @@ class TrainLoop(object):
 			d_out = disc.forward(out).squeeze()
 			disc_outs.append( F.binary_cross_entropy(d_out, y_real_).data[0] )
 
-		self.nadir = float(np.max(disc_outs) + self.nadir_slack)
+		self.nadir = float(np.max(disc_outs)*self.nadir_factor)
 
 	def update_nadir_point(self, losses_list):
-		self.nadir = float(np.max(losses_list) + self.nadir_slack)
+		self.nadir = float(np.max(losses_list)*self.nadir_factor)
+		#print(np.max(losses_list), self.nadir)
