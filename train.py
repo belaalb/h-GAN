@@ -48,10 +48,10 @@ if toy:
 	train_loader = torch.utils.data.DataLoader(toy_data, batch_size = args.batch_size, num_workers = args.workers)
 
 	# hidden_size = 512
-	generator = model.Generator(512).train()
+	generator = model.Generator_toy(512).train()
 
 	for i in range(args.ndiscriminators):
-		disc = model.Discriminator(512, optim.Adam, args.lr, (args.beta1, args.beta2)).train()
+		disc = model.Discriminator_toy(512, optim.Adam, args.lr, (args.beta1, args.beta2)).train()
 		disc_list.append(disc)
 
 else:
