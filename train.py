@@ -10,6 +10,8 @@ import torchvision.datasets as datasets
 import torch.utils.data
 import model
 
+from ToyData import ToyData
+
 # Training settings
 parser = argparse.ArgumentParser(description='Hyper volume training of GANs')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N', help='input batch size for training (default: 64)')
@@ -26,6 +28,9 @@ parser.add_argument('--seed', type=int, default=1, metavar='S', help='random see
 parser.add_argument('--save-every', type=int, default=3, metavar='N', help='how many epochs to wait before logging training status. Default is 3')
 parser.add_argument('--hyper-mode', action='store_true', default=False, help='enables training with hypervolume maximization')
 parser.add_argument('--nadir-slack', type=float, default=1.0, metavar='nadir', help='maximum distance to a nadir point component (default: 1.0)')
+parser.add_argument('--toy', action='store_true', default=False, help='Experiments with toy data')
+parser.add_argument('--toy-dataset', type=str, default=None, metavar='data', help='Toy dataset: 8gaussians or 25gaussians')
+parser.add_argument('--toy-length', type=int, metavar = 'N', help='Toy dataset length', default=100000)
 parser.add_argument('--no-cuda', action='store_true', default=False, help='Disables GPU use')
 args = parser.parse_args()
 args.cuda = True if not args.no_cuda and torch.cuda.is_available() else False
@@ -34,24 +39,39 @@ torch.manual_seed(args.seed)
 if args.cuda:
 	torch.cuda.manual_seed(args.seed)
 
-transform = transforms.Compose([transforms.Resize((64, 64)), transforms.RandomHorizontalFlip(), transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-
-celebA_data = datasets.ImageFolder(args.data_path, transform = transform)
-
-train_loader = torch.utils.data.DataLoader(celebA_data, batch_size=args.batch_size, shuffle=True, num_workers=args.workers)
-
-generator = model.Generator(100, [1024, 512, 256, 128], 3).train()
-
-if args.cuda:
-	generator = generator.cuda()
 
 disc_list = []
 
-for i in range(args.ndiscriminators):
-	disc = model.Discriminator(3, [128, 256, 512, 1024], 1, optim.Adam, args.lr, (args.beta1, args.beta2)).train()
+if toy:
+
+	toy_data = ToyData(args.toy_dataset, args.toy_length)
+	train_loader = torch.utils.data.DataLoader(toy_data, batch_size = args.batch_size, num_workers = args.workers)
+
+	# hidden_size = 512
+	generator = model.Generator(512).train()
+
+	for i in range(args.ndiscriminators):
+		disc = model.Discriminator(512, optim.Adam, args.lr, (args.beta1, args.beta2)).train()
+		disc_list.append(disc)
+
+else:
+
+	transform = transforms.Compose([transforms.Resize((64, 64)), transforms.RandomHorizontalFlip(), transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+	celebA_data = datasets.ImageFolder(args.data_path, transform = transform)
+
+	train_loader = torch.utils.data.DataLoader(celebA_data, batch_size = args.batch_size, shuffle = True, num_workers = args.workers)
+
+	generator = model.Generator(100, [1024, 512, 256, 128], 3).train()
+
+	for i in range(args.ndiscriminators):
+		disc = model.Discriminator(3, [128, 256, 512, 1024], 1, optim.Adam, args.lr, (args.beta1, args.beta2)).train()
+		if args.cuda:
+			disc = disc.cuda()
+		disc_list.append(disc)
+
 	if args.cuda:
-		disc = disc.cuda()
-	disc_list.append(disc)
+		generator = generator.cuda()
 
 optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
