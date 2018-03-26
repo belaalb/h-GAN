@@ -74,7 +74,7 @@ def save_samples(generator, cp_name, cuda_mode, save_dir='./', fig_size=(5, 5)):
 
 	if not os.path.exists(save_dir):
 		os.mkdir(save_dir)
-	save_fn = save_dir + 'Cifar10_DCGAN_'+ cp_name + '.png'
+	save_fn = save_dir + 'CelebA_DCGAN_'+ cp_name + '.png'
 	plt.savefig(save_fn)
 
 	plt.close()
@@ -86,11 +86,13 @@ def plot_learningcurves(history, *keys):
 	
 	plt.show()
 
+
 if __name__ == '__main__':
 
 	# Testing settings
 	parser = argparse.ArgumentParser(description='Testing GANs under max hyper volume training')
 	parser.add_argument('--cp-path', type=str, default=None, metavar='Path', help='Checkpoint/model path')
+	parser.add_argument('--data-path', type=str, default='./data/', metavar='Path', help='Path to data .hdf')
 	parser.add_argument('--n-tests', type=int, default=4, metavar='N', help='number of samples to  (default: 64)')
 	parser.add_argument('--no-plots', action='store_true', default=False, help='Disables plot of train/test losses')
 	parser.add_argument('--no-cuda', action='store_true', default=False, help='Disables GPU use')
@@ -118,7 +120,6 @@ if __name__ == '__main__':
 		plot_learningcurves(history, 'disc_loss')
 		plot_learningcurves(history, 'gen_loss_minibatch')
 		plot_learningcurves(history, 'disc_loss_minibatch')
-		plot_learningcurves(history, 'FID-c')
 
 	test_model(model=model, n_tests=args.n_tests, cuda_mode=args.cuda)
 	save_samples(generator=model, cp_name=args.cp_path.split('/')[-1].split('.')[0], cuda_mode=args.cuda)

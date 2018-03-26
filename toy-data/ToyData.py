@@ -1,7 +1,7 @@
 import torch
 import numpy as np
+import random
 from torch.utils.data import Dataset, DataLoader
-from itertools import combinations
 
 
 class ToyData(Dataset):
@@ -38,20 +38,22 @@ class ToyData(Dataset):
 			sample[0] += center[0]
 			sample[1] += center[1]
 
-            sample /= 1.414  # stdev
+			sample /= 1.414
 
 		if (self.dataset == '25gaussians'):
 
-			centers = combinations(np.arange(-2, 3), 2)
+			range_ = np.arange(-2, 3)
+			centers = np.transpose(np.meshgrid(range_, range_, indexing = 'ij'), (1, 2, 0)).reshape(-1, 2)
+
 			center = random.choice(centers)
 
 			sample = np.random.randn(2) * 0.05
 			sample[0] += 2 * center[0]
 			sample[1] += 2 * center[1]
 
-			sample /= 2.828  # stdev
+			sample /= 2.828
 
 				
-		sample = {'data': torch.from_numpy(sample)}
+		sample = {'data': torch.from_numpy(sample).float()}
 
 		return sample

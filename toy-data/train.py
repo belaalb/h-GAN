@@ -9,32 +9,8 @@ import torchvision.models as models
 import torchvision.datasets as datasets
 import torch.utils.data
 import model
-import os
-import resnet
-import pickle
-import numpy as np
 
-def save_testdata_statistics(model, data_loader, cuda_mode):
-
-	for batch in data_loader:
-
-		x, y = batch
-
-		x = torch.autograd.Variable(x)
-
-		out = model.forward(x).data.cpu().numpy()
-
-		try:
-			np.concatenate([logits, out], 0)
-		except NameError:
-			logits = out
-
-	m = logits.mean(0)
-	C = np.cov(logits, rowvar=False)
-
-	pfile = open('./test_data_statistics.p',"wb")
-	pickle.dump({'m':m, 'C':C}, pfile)
-	pfile.close()
+from ToyData import ToyData
 
 # Training settings
 parser = argparse.ArgumentParser(description='Hyper volume training of GANs')
@@ -46,59 +22,40 @@ parser.add_argument('--beta2', type=float, default=0.999, metavar='lambda', help
 parser.add_argument('--ndiscriminators', type=int, default=8, help='Number of discriminators. Default=8')
 parser.add_argument('--checkpoint-epoch', type=int, default=None, metavar='N', help='epoch to load for checkpointing. If None, training starts from scratch')
 parser.add_argument('--checkpoint-path', type=str, default=None, metavar='Path', help='Path for checkpointing')
-parser.add_argument('--data-path', type=str, default='./data', metavar='Path', help='Path to data')
-parser.add_argument('--fid-model-path', type=str, default=None, metavar='Path', help='Path to fid model')
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=4)
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 parser.add_argument('--save-every', type=int, default=3, metavar='N', help='how many epochs to wait before logging training status. Default is 3')
 parser.add_argument('--hyper-mode', action='store_true', default=False, help='enables training with hypervolume maximization')
 parser.add_argument('--nadir-slack', type=float, default=1.0, metavar='nadir', help='maximum distance to a nadir point component (default: 1.0)')
+parser.add_argument('--toy-dataset', type=str, default=None, metavar='data', help='Toy dataset: 8gaussians or 25gaussians')
+parser.add_argument('--toy-length', type=int, metavar = 'N', help='Toy dataset length', default=100000)
 parser.add_argument('--no-cuda', action='store_true', default=False, help='Disables GPU use')
 args = parser.parse_args()
 args.cuda = True if not args.no_cuda and torch.cuda.is_available() else False
-
-if args.fid_model_path is None:
-	print('The path for a pretrained classifier is expected to calculate FID-c. Use --fid-model-path to specify the path')
-	exit(1)
 
 torch.manual_seed(args.seed)
 if args.cuda:
 	torch.cuda.manual_seed(args.seed)
 
-transform = transforms.Compose([transforms.Resize((64, 64)), transforms.RandomHorizontalFlip(), transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-
-trainset = datasets.CIFAR10(root=args.data_path, train=True, download=True, transform=transform)
-train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, num_workers=args.workers)
-
-generator = model.Generator(100, [1024, 512, 256, 128], 3).train()
-fid_model = resnet.ResNet18().eval()
-mod_state = torch.load(args.fid_model_path, map_location = lambda storage, loc: storage)
-fid_model.load_state_dict(mod_state['model_state'])
-
-if args.cuda:
-	generator = generator.cuda()
-
-if not os.path.isfile('./test_data_statistics.p'):
-	testset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
-	test_loader = torch.utils.data.DataLoader(testset, batch_size=1000, shuffle=False, num_workers=args.workers)
-	save_testdata_statistics(fid_model, test_loader, cuda_mode=args.cuda)
-
 disc_list = []
 
+toy_data = ToyData(args.toy_dataset, args.toy_length)
+train_loader = torch.utils.data.DataLoader(toy_data, batch_size = args.batch_size, num_workers = args.workers)
+
+# hidden_size = 512
+generator = model.Generator_toy(512).train()
+
 for i in range(args.ndiscriminators):
-	disc = model.Discriminator(3, [128, 256, 512, 1024], 1, optim.Adam, args.lr, (args.beta1, args.beta2)).train()
-	if args.cuda:
-		disc = disc.cuda()
+	disc = model.Discriminator_toy(512, optim.Adam, args.lr, (args.beta1, args.beta2)).train()
 	disc_list.append(disc)
 
 optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
 if args.hyper_mode:
-	trainer = TrainLoop(generator, fid_model, disc_list, optimizer, train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, nadir_slack=args.nadir_slack, cuda=args.cuda)
+	trainer = TrainLoop(generator, disc_list, optimizer, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, nadir_slack=args.nadir_slack, cuda=args.cuda)
 else:
-	trainer = TrainLoop(generator, fid_model, disc_list, optimizer, train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, cuda=args.cuda)
+	trainer = TrainLoop(generator, disc_list, optimizer, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, cuda=args.cuda)
 
 print('Cuda Mode is: {}'.format(args.cuda))
-print('Hyper Mode is: {}'.format(args.hyper_mode))
 
 trainer.train(n_epochs=args.epochs, save_every=args.save_every)
