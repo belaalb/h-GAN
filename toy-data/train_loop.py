@@ -6,11 +6,13 @@ import numpy as np
 
 import os
 from tqdm import tqdm
+import scipy.linalg as sla
 
+import pickle
 
 class TrainLoop(object):
 
-	def __init__(self, generator, disc_list, optimizer, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_slack=None, cuda=True):
+	def __init__(self, generator, disc_list, optimizer, data_statistics_name, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_slack=None, cuda=True):
 		if checkpoint_path is None:
 			# Save to current directory
 			self.checkpoint_path = os.getcwd()
@@ -26,9 +28,15 @@ class TrainLoop(object):
 		self.disc_list = disc_list
 		self.optimizer = optimizer
 		self.train_loader = train_loader
-		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': []}
+		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': [], 'FD': []}
 		self.total_iters = 0
 		self.cur_epoch = 0
+
+		pfile = open(data_statistics_name,'rb')
+		statistics = pickle.load(pfile)
+		pfile.close()
+
+		self.m, self.C = statistics['m'], statistics['C']
 
 		if checkpoint_epoch is not None:
 			self.load_checkpoint(checkpoint_epoch)
@@ -41,6 +49,9 @@ class TrainLoop(object):
 				self.nadir = 0.0
 
 		else:
+
+			self.fixed_noise = torch.randn(1000, 2).view(-1, 2)
+
 			if nadir_slack:
 				#self.define_nadir_point(nadir_slack)
 				self.nadir_slack = nadir_slack
@@ -51,6 +62,11 @@ class TrainLoop(object):
 
 	def train(self, n_epochs=1, save_every=1):
 
+		try:
+			best_fd = np.min( self.history['FD'] )
+		except ValueError:
+			best_fd = np.inf
+
 		while (self.cur_epoch < n_epochs):
 			print('Epoch {}/{}'.format(self.cur_epoch+1, n_epochs))
 			#self.scheduler.step()
@@ -58,6 +74,10 @@ class TrainLoop(object):
 			gen_loss=0.0
 			disc_loss=0.0
 			for t, batch in train_iter:
+				print(type(batch))
+				print(batch.keys())
+				print(type(batch['data']))
+				print(batch['data'].shape)
 				new_gen_loss, new_disc_loss = self.train_step(batch)
 				gen_loss+=new_gen_loss
 				disc_loss+=new_disc_loss
@@ -65,13 +85,20 @@ class TrainLoop(object):
 				self.history['gen_loss_minibatch'].append(new_gen_loss)
 				self.history['disc_loss_minibatch'].append(new_disc_loss)
 
+			fd_ = self.valid()
+
 			self.history['gen_loss'].append(gen_loss/(t+1))
-			self.history['disc_loss'].append(disc_loss/(t+1))
+			self.history['disc_loss'].append(disc_loss/(t+1))			
+			self.history['FD'].append(fd_)
 
 			self.cur_epoch += 1
 
-			if self.cur_epoch % save_every == 0:
+			if self.history['FD'][-1] < best_fd:
+				best_fd = self.history['FD'][-1]
 				self.checkpointing()
+			elif self.cur_epoch % save_every == 0:
+				self.checkpointing()
+
 
 		# saving final models
 		print('Saving final model...')
@@ -150,6 +177,22 @@ class TrainLoop(object):
 
 		return loss_G.data[0] / len(self.disc_list), loss_d
 
+	def valid(self):
+
+		self.model.eval()
+
+		z_ = Variable(self.fixed_noise)
+
+		x_gen = self.model.forward(z_).cpu().data.numpy()
+
+		m = x_gen.mean(0)
+		C = np.cov(x_gen, rowvar = False)
+
+		fd = ((self.m - m)**2).sum() + np.matrix.trace(C + self.C - 2*sla.sqrtm( np.matmul(C, self.C) ))
+
+
+		return fd
+
 	def checkpointing(self):
 
 		# Checkpointing
@@ -208,7 +251,7 @@ class TrainLoop(object):
 	def define_nadir_point(self):
 		disc_outs = []
 
-		z_ = torch.randn(20, 2).view(-1, 2, 1, 1)
+		z_ = torch.randn(20, 2).view(-1, 2)
 		y_real_ = torch.ones(z_.size(0))
 
 		if self.cuda_mode:

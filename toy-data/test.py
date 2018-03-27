@@ -12,72 +12,87 @@ import matplotlib.pyplot as plt
 import model as model_
 import numpy as np
 import os
+from scipy.stats import chi2
 
 
-def denorm(unorm):
+def plot_ellipse(semimaj=1, semimin=1, phi=0, x_cent=0, y_cent=0, theta_num=1e3, ax=None, plot_kwargs=None, cov=None, mass_level=0.68):
+	# Get Ellipse Properties from cov matrix
+	eig_vec, eig_val, u = np.linalg.svd(cov)
+	# Make sure 0th eigenvector has positive x-coordinate
+	if eig_vec[0][0] < 0:
+		eig_vec[0] *= -1
+	semimaj = np.sqrt(eig_val[0])
+	semimin = np.sqrt(eig_val[1])
+	distances = np.linspace(0,20,20001)
+	chi2_cdf = chi2.cdf(distances,df=2)
+	multiplier = np.sqrt(distances[np.where(np.abs(chi2_cdf-mass_level)==np.abs(chi2_cdf-mass_level).min())[0][0]])
+	semimaj *= multiplier
+	semimin *= multiplier
+	phi = np.arccos(np.dot(eig_vec[0],np.array([1,0])))
+	if eig_vec[0][1] < 0 and phi > 0:
+		phi *= -1
 
-	norm = (unorm + 1) / 2
+	# Generate data for ellipse structure
+	theta = np.linspace(0, 2*np.pi, theta_num)
+	r = 1 / np.sqrt((np.cos(theta))**2 + (np.sin(theta))**2)
+	x = r*np.cos(theta)
+	y = r*np.sin(theta)
+	data = np.array([x,y])
+	S = np.array([[semimaj, 0], [0, semimin]])
+	R = np.array([[np.cos(phi), -np.sin(phi)], [np.sin(phi), np.cos(phi)]])
+	T = np.dot(R,S)
+	data = np.dot(T, data)
+	data[0] += x_cent
+	data[1] += y_cent
 
-	return norm.clamp(0, 1)
+	return data
 
-def test_model(model, n_tests, cuda_mode):
-
-	model.eval()
-
-	to_pil = transforms.ToPILImage()
-	to_tensor = transforms.ToTensor()
-
-	z_ = torch.randn(n_tests, 100).view(-1, 100, 1, 1)
-
-	if cuda_mode:
-		z_ = z_.cuda()
-
-	z_ = Variable(z_)
-	out = model.forward(z_)
-
-	for i in range(out.size(0)):
-		sample = denorm(out[i].data)
-		sample = to_pil(sample.cpu())
-		sample.save('sample_{}.png'.format(i+1))
-
-def save_samples(generator, cp_name, cuda_mode, save_dir='./', fig_size=(5, 5)):
+def save_samples(generator, cp_name, save_name, n_samples, save_dir = './'):
+	
 	generator.eval()
 
-	n_tests = fig_size[0]*fig_size[1]
 
-	noise = torch.randn(n_tests, 100).view(-1, 100, 1, 1)
+	noise = torch.randn(n_samples, 2).view(-1, 2)
 
-	if cuda_mode:
-		noise = noise.cuda()
+	noise = Variable(noise, volatile = True)
+	samples = generator(noise)
 
-	noise = Variable(noise, volatile=True)
-	gen_image = generator(noise)
-	gen_image = denorm(gen_image)
+	scale = 2.0/1.414 
+	centers = [
+	(1, 0),
+	(-1, 0),
+	(0, 1),
+	(0, -1),
+	(1. / np.sqrt(2), 1. / np.sqrt(2)),
+	(1. / np.sqrt(2), -1. / np.sqrt(2)),
+	(-1. / np.sqrt(2), 1. / np.sqrt(2)),
+	(-1. / np.sqrt(2), -1. / np.sqrt(2))
+	]
 
-	generator.train()
+	centers = [(scale * x, scale * y) for x, y in centers]
 
-	n_rows = np.sqrt(noise.size()[0]).astype(np.int32)
-	n_cols = np.sqrt(noise.size()[0]).astype(np.int32)
-	fig, axes = plt.subplots(n_rows, n_cols, figsize=fig_size)
-	for ax, img in zip(axes.flatten(), gen_image):
-		ax.axis('off')
-		ax.set_adjustable('box-forced')
-		# Scale to 0-255
-		img = (((img - img.min()) * 255) / (img.max() - img.min())).cpu().data.numpy().transpose(1, 2, 0).astype(np.uint8)
-		# ax.imshow(img.cpu().data.view(image_size, image_size, 3).numpy(), cmap=None, aspect='equal')
-		ax.imshow(img, cmap=None, aspect='equal')
-	plt.subplots_adjust(wspace=0, hspace=0)
-	title = 'Samples'
-	fig.text(0.5, 0.04, title, ha='center')
+	centers = np.asarray(centers)	
+
+	cov_all = np.array([(0.02, 0), (0, 0.02)])
+
+	plt.scatter(samples[:, 0], samples[:, 1], c = 'red', marker = 'o', alpha = 0.1)
+	plt.scatter(centers[:, 0], centers[:, 1], c = 'black', marker = 'x', alpha = 1)
+
+
+	for k in range(centers.shape[0]):
+
+		ellipse_data = plot_ellipse(x_cent = centers[k, 0], y_cent = centers[k, 1], cov = cov_all, mass_level = 0.7)
+		plt.plot(ellipse_data[0], ellipse_data[1], c = 'black', alpha = 0.2)
 
 	# save figure
 
 	if not os.path.exists(save_dir):
 		os.mkdir(save_dir)
-	save_fn = save_dir + 'CelebA_DCGAN_'+ cp_name + '.png'
+	save_fn = save_dir + 'toy_data' + save_name +  cp_name + '.png'
 	plt.savefig(save_fn)
 
 	plt.close()
+
 
 def plot_learningcurves(history, *keys):
 
@@ -93,24 +108,18 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='Testing GANs under max hyper volume training')
 	parser.add_argument('--cp-path', type=str, default=None, metavar='Path', help='Checkpoint/model path')
 	parser.add_argument('--data-path', type=str, default='./data/', metavar='Path', help='Path to data .hdf')
-	parser.add_argument('--n-tests', type=int, default=4, metavar='N', help='number of samples to  (default: 64)')
+	parser.add_argument('--n-samples', type=int, default=10000, metavar='N', help='number of samples to  (default: 10000)')
 	parser.add_argument('--no-plots', action='store_true', default=False, help='Disables plot of train/test losses')
-	parser.add_argument('--no-cuda', action='store_true', default=False, help='Disables GPU use')
 	args = parser.parse_args()
-	args.cuda = True if not args.no_cuda and torch.cuda.is_available() else False
 
 	if args.cp_path is None:
 		raise ValueError('There is no checkpoint/model path. Use arg --cp-path to indicate the path!')
 
-	model = model_.Generator(100, [1024, 512, 256, 128], 3)
+	generator = model_.Generator_toy(512)
 
 	ckpt = torch.load(args.cp_path, map_location = lambda storage, loc: storage)
-	model.load_state_dict(ckpt['model_state'])
+	generator.load_state_dict(ckpt['model_state'])
 
-	if args.cuda:
-		model = model.cuda()
-
-	print('Cuda Mode is: {}'.format(args.cuda))
 
 	history = ckpt['history']
 
@@ -121,5 +130,4 @@ if __name__ == '__main__':
 		plot_learningcurves(history, 'gen_loss_minibatch')
 		plot_learningcurves(history, 'disc_loss_minibatch')
 
-	test_model(model=model, n_tests=args.n_tests, cuda_mode=args.cuda)
-	save_samples(generator=model, cp_name=args.cp_path.split('/')[-1].split('.')[0], cuda_mode=args.cuda)
+	save_samples(generator = generator, cp_name = args.cp_path.split('/')[-1].split('.')[0], save_name = args.cp_path.split('/')[-2].split('.')[0], n_samples = args.n_samples)
