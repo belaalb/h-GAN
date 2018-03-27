@@ -3,3 +3,4 @@
 *.pyc
 *.png
 dcgan.py
+*.p
