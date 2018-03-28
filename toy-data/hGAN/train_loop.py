@@ -49,11 +49,8 @@ class TrainLoop(object):
 				self.nadir = 0.0
 
 		else:
-
 			self.fixed_noise = torch.randn(10000, 2).view(-1, 2)
-
 			if nadir_slack:
-				#self.define_nadir_point(nadir_slack)
 				self.nadir_slack = nadir_slack
 				self.hyper_mode = True
 			else:
@@ -198,7 +195,8 @@ class TrainLoop(object):
 		'history': self.history,
 		'total_iters': self.total_iters,
 		'nadir_point': self.nadir,
-		'cur_epoch': self.cur_epoch}
+		'cur_epoch': self.cur_epoch,
+		'fixed_noise': self.fixed_noise}
 		torch.save(ckpt, self.save_epoch_fmt_gen.format(self.cur_epoch))
 
 		for i, disc in enumerate(self.disc_list):
@@ -222,7 +220,8 @@ class TrainLoop(object):
 			self.total_iters = ckpt['total_iters']
 			self.cur_epoch = ckpt['cur_epoch']
 			self.nadir = ckpt['nadir_point']
-
+			self.fixed_noise = ckpt['fixed_noise']			
+		
 			for i, disc in enumerate(self.disc_list):
 				ckpt = torch.load(self.save_epoch_fmt_disc.format(i+1, epoch))
 				disc.load_state_dict(ckpt['model_state'])
