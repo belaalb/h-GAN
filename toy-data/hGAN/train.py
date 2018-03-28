@@ -46,7 +46,7 @@ parser.add_argument('--checkpoint-epoch', type=int, default=None, metavar='N', h
 parser.add_argument('--checkpoint-path', type=str, default=None, metavar='Path', help='Path for checkpointing')
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=4)
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
-parser.add_argument('--save-every', type=int, default=50, metavar='N', help='how many epochs to wait before logging training status. Default is 3')
+parser.add_argument('--save-every', type=int, default=10, metavar='N', help='how many epochs to wait before logging training status. Default is 3')
 parser.add_argument('--hyper-mode', action='store_true', default=False, help='enables training with hypervolume maximization')
 parser.add_argument('--nadir-slack', type=float, default=1.0, metavar='nadir', help='maximum distance to a nadir point component (default: 1.0)')
 parser.add_argument('--toy-dataset', choices=['8gaussians', '25gaussians'], default='8gaussians')

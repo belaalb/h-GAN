@@ -25,13 +25,14 @@ class TrainLoop(object):
 		self.save_epoch_fmt_disc = os.path.join(self.checkpoint_path, 'D_checkpoint_{}ep.pt')
 		self.cuda_mode = cuda
 		self.model = generator
-		self.fid_model = fid_model
 		self.disc = disc
 		self.optimizer = optimizer
 		self.train_loader = train_loader
 		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': [], 'FD': []}
 		self.total_iters = 0
 		self.cur_epoch = 0
+		self.lambda_grad = lambda_grad
+		self.its_disc = its_disc
 
 		pfile = open(data_statistics_name,'rb')
 		statistics = pickle.load(pfile)
@@ -106,23 +107,32 @@ class TrainLoop(object):
 		y_real_ = Variable(y_real_)
 		y_fake_ = Variable(y_fake_)
 
-		out_d = self.model.forward(z_).detach()
 
-		loss_d = 0
+		for i in range(self.its_disc):
 
-		d_real = self.disc.forward(x).squeeze()
-		d_fake = self.disc.forward(out_d).squeeze()
-		loss_disc = F.binary_cross_entropy(d_real, y_real_) + F.binary_cross_entropy(d_fake, y_fake_)
-		self.disc.optimizer.zero_grad()
-		loss_disc.backward()
-		self.calc_gradient_penalty(x, out_d)
-		self.disc.optimizer.step()
+			z_ = torch.randn(x.size(0), 100).view(-1, 100, 1, 1)
+
+			if self.cuda_mode:
+				z_ = z_.cuda()
+
+			z_ = Variable(z_)
+
+			out_d = self.model.forward(z_).detach()
+
+			loss_d = 0
+
+			self.disc.optimizer.zero_grad()
+			d_real = self.disc.forward(x).squeeze().mean()
+			d_fake = self.disc.forward(out_d).squeeze().mean()
+			loss_disc = d_fake - d_real + self.calc_gradient_penalty(x, out_d)
+			loss_disc.backward()
+			self.disc.optimizer.step()
 
 		## Train G
 
 		self.model.train()
 
-		z_ = torch.randn(x.size(0), 2).view(-1, 2)
+		z_ = torch.randn(x.size(0), 100).view(-1, 100, 1, 1)
 
 		if self.cuda_mode:
 			z_ = z_.cuda()
@@ -130,11 +140,13 @@ class TrainLoop(object):
 		z_ = Variable(z_)
 		out = self.model.forward(z_)
 
-		loss_G = F.binary_cross_entropy(self.disc.forward(out).squeeze(), y_real_)
+		loss_G = -self.disc.forward(out).mean()
 
 		self.optimizer.zero_grad()
 		loss_G.backward()
 		self.optimizer.step()
+
+		return loss_G.data[0], loss_disc.data[0]
 
 		return loss_G.data[0], loss_disc.data[0]
 
