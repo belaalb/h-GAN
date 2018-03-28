@@ -47,7 +47,7 @@ def plot_ellipse(semimaj=1, semimin=1, phi=0, x_cent=0, y_cent=0, theta_num=1e3,
 
 	return data
 
-def save_samples(generator, cp_name, save_name, n_samples, save_dir = './'):
+def save_samples(generator, cp_name, save_name, n_samples, toy_dataset, save_dir = './'):
 	
 	generator.eval()
 
@@ -57,23 +57,28 @@ def save_samples(generator, cp_name, save_name, n_samples, save_dir = './'):
 	noise = Variable(noise, volatile = True)
 	samples = generator(noise)
 
-	scale = 2.0/1.414 
-	centers = [
-	(1, 0),
-	(-1, 0),
-	(0, 1),
-	(0, -1),
-	(1. / np.sqrt(2), 1. / np.sqrt(2)),
-	(1. / np.sqrt(2), -1. / np.sqrt(2)),
-	(-1. / np.sqrt(2), 1. / np.sqrt(2)),
-	(-1. / np.sqrt(2), -1. / np.sqrt(2))
-	]
+	if (toy_dataset = '8gaussians'):
+		scale = 2.0/1.414 
+		centers = [
+		(1, 0),
+		(-1, 0),
+		(0, 1),
+		(0, -1),
+		(1. / np.sqrt(2), 1. / np.sqrt(2)),
+		(1. / np.sqrt(2), -1. / np.sqrt(2)),
+		(-1. / np.sqrt(2), 1. / np.sqrt(2)),
+		(-1. / np.sqrt(2), -1. / np.sqrt(2))
+		]
 
-	centers = [(scale * x, scale * y) for x, y in centers]
+		centers = [(scale * x, scale * y) for x, y in centers]
+		centers = np.asarray(centers)	
+		cov_all = np.array([(0.02, 0), (0, 0.02)])
 
-	centers = np.asarray(centers)	
-
-	cov_all = np.array([(0.02, 0), (0, 0.02)])
+	elif (toy_dataset = '25gaussians'):
+		range_ = np.arange(-2, 3)
+		centers = np.transpose(np.meshgrid(range_, range_, indexing = 'ij'), (1, 2, 0)).reshape(-1, 2)
+		scale = 1./2.828
+		cov_all = np.array([(0.05, 0), (0, 0.05)])
 
 	plt.scatter(samples[:, 0], samples[:, 1], c = 'red', marker = 'o', alpha = 0.1)
 	plt.scatter(centers[:, 0], centers[:, 1], c = 'black', marker = 'x', alpha = 1)
@@ -88,7 +93,7 @@ def save_samples(generator, cp_name, save_name, n_samples, save_dir = './'):
 
 	if not os.path.exists(save_dir):
 		os.mkdir(save_dir)
-	save_fn = save_dir + 'toy_data' + save_name +  cp_name + '.png'
+	save_fn = save_dir + 'toy_data_' + save_name + '_' + cp_name + '.png'
 	plt.savefig(save_fn)
 
 	plt.close()
@@ -109,6 +114,7 @@ if __name__ == '__main__':
 	parser.add_argument('--cp-path', type=str, default=None, metavar='Path', help='Checkpoint/model path')
 	parser.add_argument('--data-path', type=str, default='./data/', metavar='Path', help='Path to data .hdf')
 	parser.add_argument('--n-samples', type=int, default=10000, metavar='N', help='number of samples to  (default: 10000)')
+	parser.add_argument('--toy-dataset', choices=['8gaussians', '25gaussians'], default='8gaussians')
 	parser.add_argument('--no-plots', action='store_true', default=False, help='Disables plot of train/test losses')
 	args = parser.parse_args()
 
@@ -129,5 +135,6 @@ if __name__ == '__main__':
 		plot_learningcurves(history, 'disc_loss')
 		plot_learningcurves(history, 'gen_loss_minibatch')
 		plot_learningcurves(history, 'disc_loss_minibatch')
+		plot_learningcurves(history, 'FD')
 
-	save_samples(generator = generator, cp_name = args.cp_path.split('/')[-1].split('.')[0], save_name = args.cp_path.split('/')[-2].split('.')[0], n_samples = args.n_samples)
+	save_samples(generator = generator, cp_name = args.cp_path.split('/')[-1].split('.')[0], save_name = args.cp_path.split('/')[-2].split('.')[0], n_samples = args.n_samples, toy_dataset = args.toy_dataset)
