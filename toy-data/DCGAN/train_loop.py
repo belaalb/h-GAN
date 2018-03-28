@@ -205,26 +205,3 @@ class TrainLoop(object):
 				print('params NANs!!!!!')
 			if np.any(np.isnan(params.grad.data.cpu().numpy())):
 				print('grads NANs!!!!!!')
-
-	def define_nadir_point(self):
-		disc_outs = []
-
-		z_ = torch.randn(20, 2).view(-1, 2)
-		y_real_ = torch.ones(z_.size(0))
-
-		if self.cuda_mode:
-			z_ = z_.cuda()
-			y_real_ = y_real_.cuda()
-
-		z_ = Variable(z_)
-		y_real_ = Variable(y_real_)
-		out = self.model.forward(z_)
-
-		for disc in self.disc_list:
-			d_out = disc.forward(out).squeeze()
-			disc_outs.append( F.binary_cross_entropy(d_out, y_real_).data[0] )
-
-		self.nadir = float(np.max(disc_outs) + self.nadir_slack)
-
-	def update_nadir_point(self, losses_list):
-		self.nadir = float(np.max(losses_list) + self.nadir_slack)
