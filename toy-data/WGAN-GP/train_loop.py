@@ -12,7 +12,7 @@ import pickle
 
 class TrainLoop(object):
 
-	def __init__(self, generator, disc, optimizer, data_statistics_name, train_loader, checkpoint_path=None, checkpoint_epoch=None, cuda=True):
+	def __init__(self, generator, disc, optimizer, data_statistics_name, train_loader, lambda_grad, its_disc, checkpoint_path=None, checkpoint_epoch=None, cuda=True):
 		if checkpoint_path is None:
 			# Save to current directory
 			self.checkpoint_path = os.getcwd()
@@ -92,25 +92,22 @@ class TrainLoop(object):
 
 		x = batch
 		x = x['data']
-		z_ = torch.randn(x.size(0), 2).view(-1, 2) 
 		y_real_ = torch.ones(x.size(0))
 		y_fake_ = torch.zeros(x.size(0))
 
 		if self.cuda_mode:
 			x = x.cuda()
-			z_ = z_.cuda()
 			y_real_ = y_real_.cuda()
 			y_fake_ = y_fake_.cuda()
 
 		x = Variable(x)
-		z_ = Variable(z_)
 		y_real_ = Variable(y_real_)
 		y_fake_ = Variable(y_fake_)
 
 
 		for i in range(self.its_disc):
 
-			z_ = torch.randn(x.size(0), 100).view(-1, 100, 1, 1)
+			z_ = torch.randn(x.size(0), 2).view(-1, 2)
 
 			if self.cuda_mode:
 				z_ = z_.cuda()
@@ -132,7 +129,7 @@ class TrainLoop(object):
 
 		self.model.train()
 
-		z_ = torch.randn(x.size(0), 100).view(-1, 100, 1, 1)
+		z_ = torch.randn(x.size(0), 2).view(-1, 2)
 
 		if self.cuda_mode:
 			z_ = z_.cuda()
@@ -189,7 +186,7 @@ class TrainLoop(object):
 
 		gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates, grad_outputs=grad_outs, create_graph=True)[0].view(interpolates.size(0),-1)
 
-		gradient_penalty = ((gradients.norm(p2, dim=1) - 1) ** 2).mean() * self.lambda_grad
+		gradient_penalty = ((gradients.norm(p = 2, dim = 1) - 1) ** 2).mean() * self.lambda_grad
 
 		return gradient_penalty
 

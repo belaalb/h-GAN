@@ -41,7 +41,8 @@ parser.add_argument('--epochs', type=int, default=50, metavar='N', help='number 
 parser.add_argument('--lr', type=float, default=0.0002, metavar='LR', help='learning rate (default: 0.0002)')
 parser.add_argument('--beta1', type=float, default=0.5, metavar='lambda', help='Adam beta param (default: 0.5)')
 parser.add_argument('--beta2', type=float, default=0.999, metavar='lambda', help='Adam beta param (default: 0.999)')
-parser.add_argument('--ndiscriminators', type=int, default=8, help='Number of discriminators. Default=8')
+parser.add_argument('--lambda-grad', type=float, default=10.0, metavar='Lambda', help='lambda for gradient penalty (default: 10.0)')
+parser.add_argument('--its-disc', type=int, default=5, metavar='N', help='D train iterations per G iteration (Default: 5)')
 parser.add_argument('--checkpoint-epoch', type=int, default=None, metavar='N', help='epoch to load for checkpointing. If None, training starts from scratch')
 parser.add_argument('--checkpoint-path', type=str, default=None, metavar='Path', help='Path for checkpointing')
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=4)
@@ -57,7 +58,6 @@ torch.manual_seed(args.seed)
 if args.cuda:
 	torch.cuda.manual_seed(args.seed)
 
-disc_list = []
 
 toy_data = ToyData(args.toy_dataset, args.toy_length)
 train_loader = torch.utils.data.DataLoader(toy_data, batch_size = args.batch_size, num_workers = args.workers)
@@ -74,7 +74,7 @@ disc = model.Discriminator_toy(512, optim.Adam, args.lr, (args.beta1, args.beta2
 
 optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
-trainer = TrainLoop(generator, disc_list, optimizer, data_statistics_name, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, cuda=args.cuda)
+trainer = TrainLoop(generator, disc, optimizer, data_statistics_name, train_loader = train_loader, lambda_grad=args.lambda_grad, its_disc=args.its_disc, checkpoint_path = args.checkpoint_path, checkpoint_epoch = args.checkpoint_epoch, cuda = args.cuda)
 
 print('Cuda Mode is: {}'.format(args.cuda))
 
