@@ -57,7 +57,6 @@ torch.manual_seed(args.seed)
 if args.cuda:
 	torch.cuda.manual_seed(args.seed)
 
-disc_list = []
 
 toy_data = ToyData(args.toy_dataset, args.toy_length)
 train_loader = torch.utils.data.DataLoader(toy_data, batch_size = args.batch_size, num_workers = args.workers)
@@ -74,7 +73,7 @@ disc = model.Discriminator_toy(512, optim.Adam, args.lr, (args.beta1, args.beta2
 
 optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
-trainer = TrainLoop(generator, disc_list, optimizer, data_statistics_name, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, cuda=args.cuda)
+trainer = TrainLoop(generator, disc, optimizer, data_statistics_name, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, cuda=args.cuda)
 
 print('Cuda Mode is: {}'.format(args.cuda))
 

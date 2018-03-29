@@ -25,7 +25,6 @@ class TrainLoop(object):
 		self.save_epoch_fmt_disc = os.path.join(self.checkpoint_path, 'D_checkpoint_{}ep.pt')
 		self.cuda_mode = cuda
 		self.model = generator
-		self.fid_model = fid_model
 		self.disc = disc
 		self.optimizer = optimizer
 		self.train_loader = train_loader
@@ -108,7 +107,6 @@ class TrainLoop(object):
 
 		out_d = self.model.forward(z_).detach()
 
-		loss_d = 0
 
 		d_real = self.disc.forward(x).squeeze()
 		d_fake = self.disc.forward(out_d).squeeze()
