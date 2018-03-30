@@ -43,6 +43,6 @@ class Discriminator_toy(torch.nn.Module):
 		self.optimizer = optimizer(list(self.all_layers.parameters()), lr = lr, betas = betas)
 
 	def forward(self, x):
-		p_x = self.projection(x)
-		out = self.all_layers(p_x)
+		#p_x = self.projection(x)
+		out = self.all_layers(x)
 		return out
