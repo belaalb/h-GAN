@@ -47,6 +47,7 @@ def plot_ellipse(semimaj=1, semimin=1, phi=0, x_cent=0, y_cent=0, theta_num=1e3,
 
 	return data
 
+
 def save_samples(generator, cp_name, save_name, n_samples, toy_dataset, save_dir = './'):
 	
 	generator.eval()
