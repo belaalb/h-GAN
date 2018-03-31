@@ -12,7 +12,7 @@ import pickle
 
 class TrainLoop(object):
 
-	def __init__(self, generator, disc_list, optimizer, data_statistics_name, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_slack=None, cuda=True):
+	def __init__(self, generator, disc_list, optimizer, toy_dataset, centers, cov, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_slack=None, cuda=True):
 		if checkpoint_path is None:
 			# Save to current directory
 			self.checkpoint_path = os.getcwd()
@@ -28,15 +28,12 @@ class TrainLoop(object):
 		self.disc_list = disc_list
 		self.optimizer = optimizer
 		self.train_loader = train_loader
-		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': [], 'FD': []}
+		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': [], 'FD': [], 'quality_samples': [], 'quality_modes': []}
 		self.total_iters = 0
 		self.cur_epoch = 0
-
-		pfile = open(data_statistics_name,'rb')
-		statistics = pickle.load(pfile)
-		pfile.close()
-
-		self.m, self.C = statistics['m'], statistics['C']
+		self.toy_dataset = toy_dataset
+		self.centers = centers
+		self.cov = cov
 
 		if checkpoint_epoch is not None:
 			self.load_checkpoint(checkpoint_epoch)
@@ -56,6 +53,8 @@ class TrainLoop(object):
 			else:
 				self.hyper_mode = False
 				self.nadir = 0.0
+
+
 
 	def train(self, n_epochs=1, save_every=1):
 
@@ -78,11 +77,14 @@ class TrainLoop(object):
 				self.history['gen_loss_minibatch'].append(new_gen_loss)
 				self.history['disc_loss_minibatch'].append(new_disc_loss)
 
-			fd_ = self.valid()
+			fd_, q_samples_, q_modes_ = self.valid()
+
 
 			self.history['gen_loss'].append(gen_loss/(t+1))
 			self.history['disc_loss'].append(disc_loss/(t+1))			
 			self.history['FD'].append(fd_)
+			self.history['quality_samples'].append(q_samples_)
+			self.history['quality_modes'].append(q_modes_)
 
 			self.cur_epoch += 1
 
@@ -178,28 +180,30 @@ class TrainLoop(object):
 
 		x_gen = self.model.forward(z_).cpu().data.numpy()
 
-		m = x_gen.mean(0)
-		C = np.cov(x_gen, rowvar = False)
+		fd, q_samples, q_modes = self.metrics(x_gen, self.centers, self.cov)
+		
+		return fd, q_samples, q_modes
 
-		fd = ((self.m - m)**2).sum() + np.matrix.trace(C + self.C - 2*sla.sqrtm( np.matmul(C, self.C)))
-
-
-		return fd
-
-	def calculate_dist(x_, y_):
+	def calculate_dist(self, x_, y_):
 
 		dist_matrix = np.zeros([x_.shape[0], y_.shape[0]])
 
 		for i in range(x_.shape[0]):
 			for j in range(y_.shape[0]):
 
-				dist_matrix[i, j] = np.sqrt((x_[i, 0] - y_[i, 0]**2) + (x_[i, 1] - y_[i, 1]**2))
+				dist_matrix[i, j] = np.sqrt((x_[i, 0] - y_[j, 0])**2 + (x_[i, 1] - y_[j, 1])**2)
+
+		return dist_matrix
 
 	def metrics(self, x, centers, cov, slack = 3.0):
 
-		distances = calculate_dist(x, centers)
-
-		closest_center = np.argmax(distances, 1)
+		if (self.toy_dataset == '8gaussians'):
+			distances = self.calculate_dist(1.414*x, self.centers)
+		
+		elif (self.toy_dataset == '25gaussians'):
+			distances = self.calculate_dist(2.828*x, self.centers)
+			
+		closest_center = np.argmin(distances, 1)
 
 		n_gaussians = centers.shape[0]
 
@@ -208,30 +212,30 @@ class TrainLoop(object):
 		quality_modes = 0
 
 		for cent in range(n_gaussians):
-			
+	
 			center_samples = x[np.where(closest_center == cent)]
 
 			center_distances = distances[np.where(closest_center == cent)]
 
-			sigma = cov[cent][0, 0]
+			sigma = cov[0, 0]
 
-			try:
-				quality_samples_center = np.sum(center_distances[:, cent] <= slack*sigma)
+			quality_samples_center = np.sum(center_distances[:, cent] <= slack*sigma)
+			quality_samples += quality_samples_center
+
+			if (quality_samples_center > 0):
 				quality_modes += 1
-				quality_samples += quality_samples_center
-			except:
-				pass
 
-			if center_samples:
+			if (center_samples.shape[0] > 2):
 
 				m = np.mean(center_samples, 0)
 				C = np.cov(center_samples, rowvar = False)
 
-				fd += ((centers[cent] - m)**2).sum() + np.matrix.trace(C + cov[cent] - 2*sla.sqrtm( np.matmul(C, cov[cent])))
+				fd += ((centers[cent] - m)**2).sum() + np.matrix.trace(C + cov - 2*sla.sqrtm( np.matmul(C, cov)))
+
 
 		fd_all = fd / len(np.unique(closest_center))
 
-		return fd_all, quality_samples/x.shape[0], quality_modes
+		return fd_all, quality_samples, quality_modes
 
 	def checkpointing(self):
 

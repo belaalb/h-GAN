@@ -16,23 +16,6 @@ from ToyData import ToyData
 import os
 import pickle
 
-def save_data_statistics(data_loader, data_statistics_name):
-
-	for batch in data_loader:
-
-		x = batch['data'].cpu().numpy()
-
-		try:
-			samples = np.concatenate([samples, x], 0)
-		except NameError:
-			samples = x
-
-	m = samples.mean(0)
-	C = np.cov(samples, rowvar = False)	
-
-	pfile = open(data_statistics_name,"wb")
-	pickle.dump({'m': m, 'C': C}, pfile)
-	pfile.close()
 
 # Training settings
 parser = argparse.ArgumentParser(description='Hyper volume training of GANs')
@@ -62,6 +45,9 @@ if args.cuda:
 toy_data = ToyData(args.toy_dataset, args.toy_length)
 train_loader = torch.utils.data.DataLoader(toy_data, batch_size = args.batch_size, num_workers = args.workers)
 
+centers = toy_data.get_centers()
+cov = toy_data.get_cov()
+
 data_statistics_name = '../data_statistics' + args.toy_dataset + '.p' 
 if not os.path.isfile(data_statistics_name):
 	save_data_statistics(train_loader, data_statistics_name)
@@ -74,7 +60,7 @@ disc = model.Discriminator_toy(512, optim.Adam, args.lr, (args.beta1, args.beta2
 
 optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
-trainer = TrainLoop(generator, disc, optimizer, data_statistics_name, train_loader = train_loader, lambda_grad=args.lambda_grad, its_disc=args.its_disc, checkpoint_path = args.checkpoint_path, checkpoint_epoch = args.checkpoint_epoch, cuda = args.cuda)
+trainer = TrainLoop(generator, disc, optimizer, args.toy_dataset, centers, cov, train_loader = train_loader, lambda_grad=args.lambda_grad, its_disc=args.its_disc, checkpoint_path = args.checkpoint_path, checkpoint_epoch = args.checkpoint_epoch, cuda = args.cuda)
 
 print('Cuda Mode is: {}'.format(args.cuda))
 

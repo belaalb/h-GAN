@@ -33,7 +33,7 @@ centers = np.asarray(centers)
 
 x = []
 
-for i in range(30):
+for i in range(3):
 
 	sample = np.random.randn(2) * .02
 	center = random.choice(centers)
@@ -63,30 +63,19 @@ for cent in range(n_gaussians):
 
 	sigma = cov[cent][0, 0]
 
-	try:
-		quality_samples_center = np.sum(center_distances[:, cent] <= slack*sigma)
+	quality_samples_center = np.sum(center_distances[:, cent] <= slack*sigma)
+	quality_samples += quality_samples_center
+
+	if (quality_samples_center > 0):
 		quality_modes += 1
-		quality_samples += quality_samples_center
-	except:
-		pass
 
-	if center_samples.all():
-
-		print(center_samples)
+	if (center_samples.shape[0] > 2):
 
 		m = np.mean(center_samples, 0)
 		C = np.cov(center_samples, rowvar = False)
-
-		print(cov[cent])
-		print(C)
 
 		fd += ((centers[cent] - m)**2).sum() + np.matrix.trace(C + cov[cent] - 2*sla.sqrtm( np.matmul(C, cov[cent])))
 
 
 fd_all = fd / len(np.unique(closest_center))
-
-print(fd_all)
-print(quality_samples)
-print(quality_modes)
-
 

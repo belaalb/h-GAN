@@ -134,8 +134,10 @@ if __name__ == '__main__':
 
 		plot_learningcurves(history, 'gen_loss')
 		plot_learningcurves(history, 'disc_loss')
-		plot_learningcurves(history, 'gen_loss_minibatch')
-		plot_learningcurves(history, 'disc_loss_minibatch')
+		#plot_learningcurves(history, 'gen_loss_minibatch')
+		#plot_learningcurves(history, 'disc_loss_minibatch')
 		plot_learningcurves(history, 'FD')
+		#plot_learningcurves(history, 'quality_samples')
+		#plot_learningcurves(history, 'quality_modes')
 
 	save_samples(generator = generator, cp_name = args.cp_path.split('/')[-1].split('.')[0], save_name = args.cp_path.split('/')[-2].split('.')[0], n_samples = args.n_samples, toy_dataset = args.toy_dataset)
