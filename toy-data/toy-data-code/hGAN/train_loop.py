@@ -12,7 +12,7 @@ import pickle
 
 class TrainLoop(object):
 
-	def __init__(self, generator, disc, optimizer, toy_dataset, centers, cov, train_loader, lambda_grad, its_disc, checkpoint_path=None, checkpoint_epoch=None, cuda=True):
+	def __init__(self, generator, disc_list, optimizer, toy_dataset, centers, cov, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_slack=None, cuda=True):
 		if checkpoint_path is None:
 			# Save to current directory
 			self.checkpoint_path = os.getcwd()
@@ -22,27 +22,38 @@ class TrainLoop(object):
 				os.mkdir(self.checkpoint_path)
 
 		self.save_epoch_fmt_gen = os.path.join(self.checkpoint_path, 'checkpoint_{}ep.pt')
-		self.save_epoch_fmt_disc = os.path.join(self.checkpoint_path, 'D_checkpoint_{}ep.pt')
+		self.save_epoch_fmt_disc = os.path.join(self.checkpoint_path, 'D_{}_checkpoint_{}ep.pt')
 		self.cuda_mode = cuda
 		self.model = generator
-		self.disc = disc
+		self.disc_list = disc_list
 		self.optimizer = optimizer
 		self.train_loader = train_loader
 		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': [], 'FD': [], 'quality_samples': [], 'quality_modes': []}
 		self.total_iters = 0
 		self.cur_epoch = 0
-		self.lambda_grad = lambda_grad
-		self.its_disc = its_disc
 		self.toy_dataset = toy_dataset
 		self.centers = centers
 		self.cov = cov
 
-
-
 		if checkpoint_epoch is not None:
 			self.load_checkpoint(checkpoint_epoch)
+
+			if nadir_slack:
+				self.hyper_mode = True
+				self.nadir_slack = nadir_slack
+			else:
+				self.hyper_mode = False
+				self.nadir = 0.0
+
 		else:
 			self.fixed_noise = torch.randn(10000, 2).view(-1, 2)
+			if nadir_slack:
+				self.nadir_slack = nadir_slack
+				self.hyper_mode = True
+			else:
+				self.hyper_mode = False
+				self.nadir = 0.0
+
 
 
 	def train(self, n_epochs=1, save_every=1):
@@ -94,42 +105,38 @@ class TrainLoop(object):
 
 		x = batch
 		x = x['data']
+		z_ = torch.randn(x.size(0), 2).view(-1, 2) 
 		y_real_ = torch.ones(x.size(0))
 		y_fake_ = torch.zeros(x.size(0))
 
 		if self.cuda_mode:
 			x = x.cuda()
+			z_ = z_.cuda()
 			y_real_ = y_real_.cuda()
 			y_fake_ = y_fake_.cuda()
 
 		x = Variable(x)
+		z_ = Variable(z_)
 		y_real_ = Variable(y_real_)
 		y_fake_ = Variable(y_fake_)
 
+		out_d = self.model.forward(z_).detach()
 
-		for i in range(self.its_disc):
+		loss_d = 0
 
-			z_ = torch.randn(x.size(0), 2).view(-1, 2)
-
-			if self.cuda_mode:
-				z_ = z_.cuda()
-
-			z_ = Variable(z_)
-
-			out_d = self.model.forward(z_).detach()
-
-			loss_d = 0
-
-			self.disc.optimizer.zero_grad()
-			d_real = self.disc.forward(x).squeeze().mean()
-			d_fake = self.disc.forward(out_d).squeeze().mean()
-			loss_disc = d_fake - d_real + self.calc_gradient_penalty(x, out_d)
+		for disc in self.disc_list:
+			d_real = disc.forward(x).squeeze()
+			d_fake = disc.forward(out_d).squeeze()
+			loss_disc = F.binary_cross_entropy(d_real, y_real_) + F.binary_cross_entropy(d_fake, y_fake_)
+			disc.optimizer.zero_grad()
 			loss_disc.backward()
-			self.disc.optimizer.step()
+			disc.optimizer.step()
+
+			loss_d += loss_disc.data[0]
+
+		loss_d /= len(self.disc_list)
 
 		## Train G
-
-		self.model.train()
 
 		z_ = torch.randn(x.size(0), 2).view(-1, 2)
 
@@ -139,16 +146,31 @@ class TrainLoop(object):
 		z_ = Variable(z_)
 		out = self.model.forward(z_)
 
-		loss_G = -self.disc.forward(out).mean()
+		loss_G = 0
+
+		if self.hyper_mode:
+
+			losses_list_float = []
+			losses_list_var = []
+
+			for disc in self.disc_list:
+				losses_list_var.append( F.binary_cross_entropy( disc.forward(out).squeeze(), y_real_) )
+				losses_list_float.append( losses_list_var[-1].data[0] )
+
+			self.update_nadir_point(losses_list_float)
+
+			for loss in losses_list_var:
+				loss_G -= torch.log( self.nadir - loss )
+
+		else:
+			for disc in self.disc_list:
+				loss_G += F.binary_cross_entropy(disc.forward(out).squeeze(), y_real_)
 
 		self.optimizer.zero_grad()
 		loss_G.backward()
 		self.optimizer.step()
 
-		return loss_G.data[0], loss_disc.data[0]
-
-		return loss_G.data[0], loss_disc.data[0]
-
+		return loss_G.data[0] / len(self.disc_list), loss_d
 
 	def valid(self):
 
@@ -215,33 +237,6 @@ class TrainLoop(object):
 
 		return fd_all, quality_samples, quality_modes
 
-
-
-	def calc_gradient_penalty(self, real_data, fake_data):
-		#alpha = torch.rand(real_data.size(0), 1)
-		#alpha = alpha.expand(real_data.size())
-
-		shape = [real_data.size(0)] + [1] * (real_data.dim() - 1)
-		alpha = torch.rand(shape)
-
-		if self.cuda_mode:
-			alpha = alpha.cuda()
-
-		interpolates = Variable(alpha * real_data.data + ((1 - alpha) * fake_data.data), requires_grad=True)
-
-		disc_interpolates = self.disc.forward(interpolates)
-
-		grad_outs = torch.ones(disc_interpolates.size())
-
-		if self.cuda_mode:
-			grad_outs = grad_outs.cuda()
-
-		gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates, grad_outputs=grad_outs, create_graph=True)[0].view(interpolates.size(0),-1)
-
-		gradient_penalty = ((gradients.norm(p = 2, dim = 1) - 1) ** 2).mean() * self.lambda_grad
-
-		return gradient_penalty
-
 	def checkpointing(self):
 
 		# Checkpointing
@@ -250,13 +245,15 @@ class TrainLoop(object):
 		'optimizer_state': self.optimizer.state_dict(),
 		'history': self.history,
 		'total_iters': self.total_iters,
-		'fixed_noise': self.fixed_noise,
-		'cur_epoch': self.cur_epoch}
+		'nadir_point': self.nadir,
+		'cur_epoch': self.cur_epoch,
+		'fixed_noise': self.fixed_noise}
 		torch.save(ckpt, self.save_epoch_fmt_gen.format(self.cur_epoch))
 
-		ckpt = {'model_state': self.disc.state_dict(),
-		'optimizer_state': self.disc.optimizer.state_dict()}
-		torch.save(ckpt, self.save_epoch_fmt_disc.format(self.cur_epoch))
+		for i, disc in enumerate(self.disc_list):
+			ckpt = {'model_state': disc.state_dict(),
+			'optimizer_state': disc.optimizer.state_dict()}
+			torch.save(ckpt, self.save_epoch_fmt_disc.format(i+1, self.cur_epoch))
 
 	def load_checkpoint(self, epoch):
 
@@ -273,11 +270,14 @@ class TrainLoop(object):
 			self.history = ckpt['history']
 			self.total_iters = ckpt['total_iters']
 			self.cur_epoch = ckpt['cur_epoch']
-			self.fixed_noise = ckpt['fixed_noise']
+			self.nadir = ckpt['nadir_point']
+			self.fixed_noise = ckpt['fixed_noise']			
+		
+			for i, disc in enumerate(self.disc_list):
+				ckpt = torch.load(self.save_epoch_fmt_disc.format(i+1, epoch))
+				disc.load_state_dict(ckpt['model_state'])
+				disc.optimizer.load_state_dict(ckpt['optimizer_state'])
 
-			ckpt = torch.load(self.save_epoch_fmt_disc.format(epoch))
-			self.disc.load_state_dict(ckpt['model_state'])
-			self.disc.optimizer.load_state_dict(ckpt['optimizer_state'])
 		else:
 			print('No checkpoint found at: {}'.format(ckpt))
 
@@ -294,3 +294,25 @@ class TrainLoop(object):
 			if np.any(np.isnan(params.grad.data.cpu().numpy())):
 				print('grads NANs!!!!!!')
 
+	def define_nadir_point(self):
+		disc_outs = []
+
+		z_ = torch.randn(20, 2).view(-1, 2)
+		y_real_ = torch.ones(z_.size(0))
+
+		if self.cuda_mode:
+			z_ = z_.cuda()
+			y_real_ = y_real_.cuda()
+
+		z_ = Variable(z_)
+		y_real_ = Variable(y_real_)
+		out = self.model.forward(z_)
+
+		for disc in self.disc_list:
+			d_out = disc.forward(out).squeeze()
+			disc_outs.append( F.binary_cross_entropy(d_out, y_real_).data[0] )
+
+		self.nadir = float(np.max(disc_outs) + self.nadir_slack)
+
+	def update_nadir_point(self, losses_list):
+		self.nadir = float(np.max(losses_list) + self.nadir_slack)

@@ -28,7 +28,7 @@ class TrainLoop(object):
 		self.disc = disc
 		self.optimizer = optimizer
 		self.train_loader = train_loader
-		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': [], 'FD': [], 'quality_samples': [], 'quality_modes': []}
+		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': [], 'FD': [], 'quality_samples': [], 'quality_modes': [}
 		self.total_iters = 0
 		self.cur_epoch = 0
 		self.lambda_grad = lambda_grad

@@ -48,10 +48,6 @@ train_loader = torch.utils.data.DataLoader(toy_data, batch_size = args.batch_siz
 centers = toy_data.get_centers()
 cov = toy_data.get_cov()
 
-data_statistics_name = '../data_statistics' + args.toy_dataset + '.p' 
-if not os.path.isfile(data_statistics_name):
-	save_data_statistics(train_loader, data_statistics_name)
-
 # hidden_size = 512
 generator = model.Generator_toy(512).train()
 

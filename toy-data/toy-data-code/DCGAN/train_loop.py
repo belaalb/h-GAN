@@ -12,7 +12,7 @@ import pickle
 
 class TrainLoop(object):
 
-	def __init__(self, generator, disc, optimizer, toy_dataset, centers, cov, train_loader, lambda_grad, its_disc, checkpoint_path=None, checkpoint_epoch=None, cuda=True):
+	def __init__(self, generator, disc, optimizer, toy_dataset, centers, cov, train_loader, checkpoint_path=None, checkpoint_epoch=None, cuda=True):
 		if checkpoint_path is None:
 			# Save to current directory
 			self.checkpoint_path = os.getcwd()
@@ -31,12 +31,9 @@ class TrainLoop(object):
 		self.history = {'gen_loss': [], 'gen_loss_minibatch': [], 'disc_loss': [], 'disc_loss_minibatch': [], 'FD': [], 'quality_samples': [], 'quality_modes': []}
 		self.total_iters = 0
 		self.cur_epoch = 0
-		self.lambda_grad = lambda_grad
-		self.its_disc = its_disc
 		self.toy_dataset = toy_dataset
 		self.centers = centers
 		self.cov = cov
-
 
 
 		if checkpoint_epoch is not None:
@@ -68,7 +65,6 @@ class TrainLoop(object):
 
 			fd_, q_samples_, q_modes_ = self.valid()
 
-
 			self.history['gen_loss'].append(gen_loss/(t+1))
 			self.history['disc_loss'].append(disc_loss/(t+1))			
 			self.history['FD'].append(fd_)
@@ -94,38 +90,30 @@ class TrainLoop(object):
 
 		x = batch
 		x = x['data']
+		z_ = torch.randn(x.size(0), 2).view(-1, 2) 
 		y_real_ = torch.ones(x.size(0))
 		y_fake_ = torch.zeros(x.size(0))
 
 		if self.cuda_mode:
 			x = x.cuda()
+			z_ = z_.cuda()
 			y_real_ = y_real_.cuda()
 			y_fake_ = y_fake_.cuda()
 
 		x = Variable(x)
+		z_ = Variable(z_)
 		y_real_ = Variable(y_real_)
 		y_fake_ = Variable(y_fake_)
 
+		out_d = self.model.forward(z_).detach()
 
-		for i in range(self.its_disc):
 
-			z_ = torch.randn(x.size(0), 2).view(-1, 2)
-
-			if self.cuda_mode:
-				z_ = z_.cuda()
-
-			z_ = Variable(z_)
-
-			out_d = self.model.forward(z_).detach()
-
-			loss_d = 0
-
-			self.disc.optimizer.zero_grad()
-			d_real = self.disc.forward(x).squeeze().mean()
-			d_fake = self.disc.forward(out_d).squeeze().mean()
-			loss_disc = d_fake - d_real + self.calc_gradient_penalty(x, out_d)
-			loss_disc.backward()
-			self.disc.optimizer.step()
+		d_real = self.disc.forward(x).squeeze()
+		d_fake = self.disc.forward(out_d).squeeze()
+		loss_disc = F.binary_cross_entropy(d_real, y_real_) + F.binary_cross_entropy(d_fake, y_fake_)
+		self.disc.optimizer.zero_grad()
+		loss_disc.backward()
+		self.disc.optimizer.step()
 
 		## Train G
 
@@ -139,13 +127,11 @@ class TrainLoop(object):
 		z_ = Variable(z_)
 		out = self.model.forward(z_)
 
-		loss_G = -self.disc.forward(out).mean()
+		loss_G = F.binary_cross_entropy(self.disc.forward(out).squeeze(), y_real_)
 
 		self.optimizer.zero_grad()
 		loss_G.backward()
 		self.optimizer.step()
-
-		return loss_G.data[0], loss_disc.data[0]
 
 		return loss_G.data[0], loss_disc.data[0]
 
@@ -216,32 +202,6 @@ class TrainLoop(object):
 		return fd_all, quality_samples, quality_modes
 
 
-
-	def calc_gradient_penalty(self, real_data, fake_data):
-		#alpha = torch.rand(real_data.size(0), 1)
-		#alpha = alpha.expand(real_data.size())
-
-		shape = [real_data.size(0)] + [1] * (real_data.dim() - 1)
-		alpha = torch.rand(shape)
-
-		if self.cuda_mode:
-			alpha = alpha.cuda()
-
-		interpolates = Variable(alpha * real_data.data + ((1 - alpha) * fake_data.data), requires_grad=True)
-
-		disc_interpolates = self.disc.forward(interpolates)
-
-		grad_outs = torch.ones(disc_interpolates.size())
-
-		if self.cuda_mode:
-			grad_outs = grad_outs.cuda()
-
-		gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates, grad_outputs=grad_outs, create_graph=True)[0].view(interpolates.size(0),-1)
-
-		gradient_penalty = ((gradients.norm(p = 2, dim = 1) - 1) ** 2).mean() * self.lambda_grad
-
-		return gradient_penalty
-
 	def checkpointing(self):
 
 		# Checkpointing
@@ -293,4 +253,3 @@ class TrainLoop(object):
 				print('params NANs!!!!!')
 			if np.any(np.isnan(params.grad.data.cpu().numpy())):
 				print('grads NANs!!!!!!')
-
