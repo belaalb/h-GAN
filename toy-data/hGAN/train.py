@@ -33,13 +33,9 @@ parser.add_argument('--hyper-mode', action='store_true', default=False, help='en
 parser.add_argument('--nadir-slack', type=float, default=1.0, metavar='nadir', help='maximum distance to a nadir point component (default: 1.0)')
 parser.add_argument('--toy-dataset', choices=['8gaussians', '25gaussians'], default='8gaussians')
 parser.add_argument('--toy-length', type=int, metavar = 'N', help='Toy dataset length', default=100000)
-parser.add_argument('--no-cuda', action='store_true', default=False, help='Disables GPU use')
 args = parser.parse_args()
-args.cuda = True if not args.no_cuda and torch.cuda.is_available() else False
 
 torch.manual_seed(args.seed)
-if args.cuda:
-	torch.cuda.manual_seed(args.seed)
 
 disc_list = []
 
@@ -59,11 +55,9 @@ for i in range(args.ndiscriminators):
 optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
 if args.hyper_mode:
-	trainer = TrainLoop(generator, disc_list, optimizer, args.toy_dataset, centers, cov, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, nadir_slack=args.nadir_slack, cuda=args.cuda)
+	trainer = TrainLoop(generator, disc_list, optimizer, args.toy_dataset, centers, cov, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, nadir_slack=args.nadir_slack)
 
 else:
-	trainer = TrainLoop(generator, disc_list, optimizer, args.toy_dataset, centers, cov, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch, cuda=args.cuda)
-
-print('Cuda Mode is: {}'.format(args.cuda))
+	trainer = TrainLoop(generator, disc_list, optimizer, args.toy_dataset, centers, cov, train_loader = train_loader, checkpoint_path=args.checkpoint_path, checkpoint_epoch=args.checkpoint_epoch)
 
 trainer.train(n_epochs=args.epochs, save_every=args.save_every)

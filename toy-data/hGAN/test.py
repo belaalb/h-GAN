@@ -47,7 +47,6 @@ def plot_ellipse(semimaj=1, semimin=1, phi=0, x_cent=0, y_cent=0, theta_num=1e3,
 
 	return data
 
-
 def save_samples(generator, cp_name, save_name, n_samples, toy_dataset, save_dir = './'):
 	
 	generator.eval()
@@ -117,6 +116,7 @@ if __name__ == '__main__':
 	parser.add_argument('--n-samples', type=int, default=2500, metavar='N', help='number of samples to  (default: 10000)')
 	parser.add_argument('--toy-dataset', choices=['8gaussians', '25gaussians'], default='8gaussians')
 	parser.add_argument('--no-plots', action='store_true', default=False, help='Disables plot of train/test losses')
+	parser.add_argument('--no-print', action='store_true', default=False, help='Disables print of reached best values of metrics')
 	args = parser.parse_args()
 
 	if args.cp_path is None:
@@ -134,10 +134,13 @@ if __name__ == '__main__':
 
 		plot_learningcurves(history, 'gen_loss')
 		plot_learningcurves(history, 'disc_loss')
-		#plot_learningcurves(history, 'gen_loss_minibatch')
-		#plot_learningcurves(history, 'disc_loss_minibatch')
 		plot_learningcurves(history, 'FD')
-		#plot_learningcurves(history, 'quality_samples')
-		#plot_learningcurves(history, 'quality_modes')
+		plot_learningcurves(history, 'quality_samples')
+		plot_learningcurves(history, 'quality_modes')
+
+	if not args.no_print:
+		print('Min value of FD:', np.min(history['FD']))
+		print('Max value of high quality samples (%):', (np.max(history['quality_samples'])/10000.0)*100)
+		print('Max value of covered modes:', np.max(history['quality_modes']))
 
 	save_samples(generator = generator, cp_name = args.cp_path.split('/')[-1].split('.')[0], save_name = args.cp_path.split('/')[-2].split('.')[0], n_samples = args.n_samples, toy_dataset = args.toy_dataset)

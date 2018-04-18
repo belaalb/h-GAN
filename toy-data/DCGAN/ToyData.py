@@ -28,7 +28,7 @@ class ToyData(Dataset):
 		
 		elif (self.dataset == '25gaussians'):
 			range_ = np.arange(-2, 3)
-			centers = np.transpose(np.meshgrid(range_, range_, indexing = 'ij'), (1, 2, 0)).reshape(-1, 2)
+			centers = 2*np.transpose(np.meshgrid(range_, range_, indexing = 'ij'), (1, 2, 0)).reshape(-1, 2)
 
 		self.centers = np.asarray(centers)
 
@@ -51,8 +51,8 @@ class ToyData(Dataset):
 			center = random.choice(self.centers)
 
 			sample = np.random.randn(2) * 0.05
-			sample[0] += 2 * center[0]
-			sample[1] += 2 * center[1]
+			sample[0] += center[0]
+			sample[1] += center[1]
 
 			sample /= 2.828
 	

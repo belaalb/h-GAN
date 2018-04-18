@@ -12,7 +12,7 @@ import pickle
 
 class TrainLoop(object):
 
-	def __init__(self, generator, disc_list, optimizer, toy_dataset, centers, cov, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_slack=None, cuda=True):
+	def __init__(self, generator, disc_list, optimizer, toy_dataset, centers, cov, train_loader, checkpoint_path=None, checkpoint_epoch=None, nadir_slack=None):
 		if checkpoint_path is None:
 			# Save to current directory
 			self.checkpoint_path = os.getcwd()
@@ -23,7 +23,6 @@ class TrainLoop(object):
 
 		self.save_epoch_fmt_gen = os.path.join(self.checkpoint_path, 'checkpoint_{}ep.pt')
 		self.save_epoch_fmt_disc = os.path.join(self.checkpoint_path, 'D_{}_checkpoint_{}ep.pt')
-		self.cuda_mode = cuda
 		self.model = generator
 		self.disc_list = disc_list
 		self.optimizer = optimizer
@@ -109,12 +108,6 @@ class TrainLoop(object):
 		y_real_ = torch.ones(x.size(0))
 		y_fake_ = torch.zeros(x.size(0))
 
-		if self.cuda_mode:
-			x = x.cuda()
-			z_ = z_.cuda()
-			y_real_ = y_real_.cuda()
-			y_fake_ = y_fake_.cuda()
-
 		x = Variable(x)
 		z_ = Variable(z_)
 		y_real_ = Variable(y_real_)
@@ -139,9 +132,6 @@ class TrainLoop(object):
 		## Train G
 
 		z_ = torch.randn(x.size(0), 2).view(-1, 2)
-
-		if self.cuda_mode:
-			z_ = z_.cuda()
 
 		z_ = Variable(z_)
 		out = self.model.forward(z_)
@@ -195,7 +185,7 @@ class TrainLoop(object):
 
 		return dist_matrix
 
-	def metrics(self, x, centers, cov, slack = 3.0):
+	def metrics(self, x, centers, cov, slack = 2.0):
 
 		if (self.toy_dataset == '8gaussians'):
 			distances = self.calculate_dist(1.414*x, self.centers)
@@ -219,13 +209,13 @@ class TrainLoop(object):
 
 			sigma = cov[0, 0]
 
-			quality_samples_center = np.sum(center_distances[:, cent] <= slack*sigma)
+			quality_samples_center = np.sum(center_distances[:, cent] <= slack*np.sqrt(sigma))
 			quality_samples += quality_samples_center
 
 			if (quality_samples_center > 0):
 				quality_modes += 1
 
-			if (center_samples.shape[0] > 2):
+			if (center_samples.shape[0] > 3):
 
 				m = np.mean(center_samples, 0)
 				C = np.cov(center_samples, rowvar = False)
@@ -299,10 +289,6 @@ class TrainLoop(object):
 
 		z_ = torch.randn(20, 2).view(-1, 2)
 		y_real_ = torch.ones(z_.size(0))
-
-		if self.cuda_mode:
-			z_ = z_.cuda()
-			y_real_ = y_real_.cuda()
 
 		z_ = Variable(z_)
 		y_real_ = Variable(y_real_)

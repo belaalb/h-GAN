@@ -159,7 +159,7 @@ class TrainLoop(object):
 
 		return dist_matrix
 
-	def metrics(self, x, centers, cov, slack = 3.0):
+	def metrics(self, x, centers, cov, slack = 2.0):
 
 		if (self.toy_dataset == '8gaussians'):
 			distances = self.calculate_dist(1.414*x, self.centers)
@@ -183,13 +183,13 @@ class TrainLoop(object):
 
 			sigma = cov[0, 0]
 
-			quality_samples_center = np.sum(center_distances[:, cent] <= slack*sigma)
+			quality_samples_center = np.sum(center_distances[:, cent] <= slack*np.sqrt(sigma))
 			quality_samples += quality_samples_center
 
 			if (quality_samples_center > 0):
 				quality_modes += 1
 
-			if (center_samples.shape[0] > 2):
+			if (center_samples.shape[0] > 3):
 
 				m = np.mean(center_samples, 0)
 				C = np.cov(center_samples, rowvar = False)
