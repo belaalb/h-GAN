@@ -66,8 +66,8 @@ class ToyData(Dataset):
 
 	def get_cov(self):
 		if (self.dataset == '8gaussians'):
-			cov = 0.02*np.eye(2)
+			cov = (0.02**2)*np.eye(2)
 
 		elif (self.dataset == '25gaussians'):
-			cov = 0.05*np.eye(2)
+			cov = (0.05**2)*np.eye(2)
 		return cov 
