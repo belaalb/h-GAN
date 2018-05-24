@@ -1,6 +1,4 @@
-# Hyper Volume Generative Adversarial Network - hGAN
-
-Work in progress.
+# Training GANs with multiple discriminators via Hypervolume maximization
 
 Replication of [Stabilizing GAN Training with Multiple Random Projections](https://arxiv.org/abs/1705.07831) and extension including training with multi-objective training via hyper volume maximization (based on [Multi-Objective Optimization for Self-Adjusting Weighted Gradient in Machine Learning Tasks](https://arxiv.org/abs/1506.01113))
 
